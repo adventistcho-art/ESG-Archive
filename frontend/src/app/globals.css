@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --esg-e: #10b981;
+    --esg-s: #3b82f6;
+    --esg-g: #8b5cf6;
+  }
+
+  body {
+    @apply bg-white text-gray-900;
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+}
+
+@layer components {
+  .esg-tag-environment {
+    @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+  }
+
+  .esg-tag-social {
+    @apply bg-blue-50 text-blue-700 border-blue-200;
+  }
+
+  .esg-tag-governance {
+    @apply bg-violet-50 text-violet-700 border-violet-200;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Print styles for PDF */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
