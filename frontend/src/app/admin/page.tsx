@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { adminAPI, plansAPI } from '@/lib/api';
-import { EsgProject, EsgPlan } from '@/lib/types';
+import { EsgProject, EsgPlan, PerformanceProposal, ProposalGrade } from '@/lib/types';
 import { getCategoryLabel, getCategoryColor, getCategoryKorean, formatBudget } from '@/lib/utils';
 import ProjectForm from '@/components/ProjectForm';
 import ResultForm from '@/components/ResultForm';
@@ -31,7 +31,7 @@ export default function AdminPage() {
   const router = useRouter();
   const { isAuthenticated, user, logout, loadFromStorage } = useAuthStore();
   
-  const [activeTab, setActiveTab] = useState<'projects' | 'plans'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'plans' | 'proposals'>('projects');
   
   // Projects state
   const [projects, setProjects] = useState<EsgProject[]>([]);
@@ -48,6 +48,11 @@ export default function AdminPage() {
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [editingPlan, setEditingPlan] = useState<EsgPlan | null>(null);
   const [planSearchQuery, setPlanSearchQuery] = useState('');
+
+  // Proposals state
+  const [proposals, setProposals] = useState<PerformanceProposal[]>([]);
+  const [loadingProposals, setLoadingProposals] = useState(true);
+  const [proposalSearchQuery, setProposalSearchQuery] = useState('');
 
   useEffect(() => {
     loadFromStorage();
@@ -87,12 +92,27 @@ export default function AdminPage() {
     }
   }, []);
 
+  const loadProposals = useCallback(async () => {
+    try {
+      setLoadingProposals(true);
+      // localStorage에서 가져오기 (실제로는 API 호출)
+      const data = JSON.parse(localStorage.getItem('proposals') || '[]');
+      setProposals(data);
+    } catch (e) {
+      console.error('Failed to load proposals', e);
+      setProposals([]);
+    } finally {
+      setLoadingProposals(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadProjects();
       loadPlans();
+      loadProposals();
     }
-  }, [isAuthenticated, loadProjects, loadPlans]);
+  }, [isAuthenticated, loadProjects, loadPlans, loadProposals]);
 
   const handleDeleteProject = async (id: string) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
@@ -148,6 +168,23 @@ export default function AdminPage() {
     setPlans((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const handleUpdateProposalStatus = (id: string, status: PerformanceProposal['status'], grade?: ProposalGrade, comments?: string) => {
+    const updatedProposals = proposals.map(p => 
+      p.id === id 
+        ? { ...p, status, grade, comments, reviewedAt: new Date().toISOString(), reviewedBy: user?.email }
+        : p
+    );
+    setProposals(updatedProposals);
+    localStorage.setItem('proposals', JSON.stringify(updatedProposals));
+  };
+
+  const handleDeleteProposal = (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return;
+    const updatedProposals = proposals.filter(p => p.id !== id);
+    setProposals(updatedProposals);
+    localStorage.setItem('proposals', JSON.stringify(updatedProposals));
+  };
+
   const filteredProjects = projects.filter(
     (p) =>
       p.title.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
@@ -161,6 +198,13 @@ export default function AdminPage() {
       p.deptName.toLowerCase().includes(planSearchQuery.toLowerCase())
   );
 
+  const filteredProposals = proposals.filter(
+    (p) =>
+      p.title.toLowerCase().includes(proposalSearchQuery.toLowerCase()) ||
+      p.submitterDept.toLowerCase().includes(proposalSearchQuery.toLowerCase()) ||
+      p.submitterName.toLowerCase().includes(proposalSearchQuery.toLowerCase())
+  );
+
   const projectStats = {
     total: projects.length,
     published: projects.filter((p) => p.isPublished).length,
@@ -171,6 +215,13 @@ export default function AdminPage() {
     total: plans.length,
     planned: plans.filter((p) => p.status === 'PLANNED').length,
     inProgress: plans.filter((p) => p.status === 'IN_PROGRESS').length,
+  };
+
+  const proposalStats = {
+    total: proposals.length,
+    pending: proposals.filter((p) => p.status === 'PENDING').length,
+    approved: proposals.filter((p) => p.status === 'APPROVED').length,
+    reviewing: proposals.filter((p) => p.status === 'REVIEWING').length,
   };
 
   if (!isAuthenticated) {
@@ -252,6 +303,22 @@ export default function AdminPage() {
           >
             <Calendar className="w-4 h-4" />
             계획 관리
+          </button>
+          <button
+            onClick={() => setActiveTab('proposals')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === 'proposals'
+                ? 'bg-gray-900 text-white shadow-lg'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            안건 관리
+            {proposalStats.pending > 0 && (
+              <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                {proposalStats.pending}
+              </span>
+            )}
           </button>
         </div>
 
@@ -635,6 +702,281 @@ export default function AdminPage() {
                     );
                   })}
                 </AnimatePresence>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Proposals Tab */}
+        {activeTab === 'proposals' && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl border border-gray-100 p-6"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                    <BarChart3 className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <span className="text-sm text-gray-400">전체 안건</span>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{proposalStats.total}</p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-white rounded-2xl border border-gray-100 p-6"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <span className="text-sm text-gray-400">대기중</span>
+                </div>
+                <p className="text-3xl font-bold text-amber-600">{proposalStats.pending}</p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="bg-white rounded-2xl border border-gray-100 p-6"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <Eye className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <span className="text-sm text-gray-400">검토중</span>
+                </div>
+                <p className="text-3xl font-bold text-blue-600">{proposalStats.reviewing}</p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-white rounded-2xl border border-gray-100 p-6"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <span className="text-sm text-gray-400">승인</span>
+                </div>
+                <p className="text-3xl font-bold text-emerald-600">{proposalStats.approved}</p>
+              </motion.div>
+            </div>
+
+            {/* Search */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  value={proposalSearchQuery}
+                  onChange={(e) => setProposalSearchQuery(e.target.value)}
+                  placeholder="안건 제목, 부서명, 제출자로 검색..."
+                  className="w-full pl-10 pr-4 py-2 text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Proposals List */}
+            {loadingProposals ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <AnimatePresence mode="popLayout">
+                  {filteredProposals.map((proposal) => {
+                    const statusConfig = {
+                      PENDING: { label: '대기중', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                      REVIEWING: { label: '검토중', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                      APPROVED: { label: '승인', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      REJECTED: { label: '반려', color: 'bg-red-50 text-red-700 border-red-200' },
+                    };
+
+                    const gradeConfig = {
+                      S: { label: 'S등급', color: 'bg-purple-100 text-purple-800', desc: '30억 이상' },
+                      A: { label: 'A등급', color: 'bg-blue-100 text-blue-800', desc: '20억 이상' },
+                      B: { label: 'B등급', color: 'bg-green-100 text-green-800', desc: '10억 이상' },
+                      C: { label: 'C등급', color: 'bg-yellow-100 text-yellow-800', desc: '3억 이상' },
+                      D: { label: 'D등급', color: 'bg-gray-100 text-gray-800', desc: '3억 미만' },
+                    };
+
+                    return (
+                      <motion.div
+                        key={proposal.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-bold text-gray-900 truncate">
+                                {proposal.title}
+                              </h3>
+                              <span
+                                className={`px-2 py-1 rounded-lg text-xs font-medium border ${
+                                  statusConfig[proposal.status].color
+                                }`}
+                              >
+                                {statusConfig[proposal.status].label}
+                              </span>
+                              {proposal.grade && (
+                                <span
+                                  className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                    gradeConfig[proposal.grade].color
+                                  }`}
+                                  title={gradeConfig[proposal.grade].desc}
+                                >
+                                  {gradeConfig[proposal.grade].label}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                              <span>{proposal.submitterDept}</span>
+                              <span>{proposal.submitterName}</span>
+                              <span>{new Date(proposal.submittedAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => handleDeleteProposal(proposal.id)}
+                              className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 성과 개요 */}
+                        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">성과 개요</h4>
+                          <p className="text-sm text-gray-600 mb-1">{proposal.overview.description}</p>
+                          <p className="text-sm text-gray-600 mb-1">{proposal.overview.projectName}</p>
+                          <p className="text-sm text-gray-600">{proposal.overview.futureActivities}</p>
+                        </div>
+
+                        {/* 사업결의번호 */}
+                        <div className="mb-4">
+                          <span className="text-sm font-medium text-gray-700">사업결의번호: </span>
+                          <span className="text-sm text-gray-600">{proposal.resolution.resolution}</span>
+                        </div>
+
+                        {/* 성과담당자 */}
+                        {proposal.managers.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">성과담당자</h4>
+                            <div className="space-y-1">
+                              {proposal.managers.map((manager, idx) => (
+                                <div key={idx} className="text-sm text-gray-600">
+                                  {manager.dept} | {manager.position} {manager.name} ({manager.period})
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 증빙자료 */}
+                        {proposal.evidenceDocuments.length > 0 && (
+                          <div className="mb-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2">
+                              증빙자료 ({proposal.evidenceDocuments.length}건)
+                            </h4>
+                            <div className="space-y-1">
+                              {proposal.evidenceDocuments.slice(0, 3).map((doc, idx) => (
+                                <div key={idx} className="text-sm text-gray-600">
+                                  {doc.year}. {doc.title}
+                                </div>
+                              ))}
+                              {proposal.evidenceDocuments.length > 3 && (
+                                <div className="text-sm text-gray-400">
+                                  외 {proposal.evidenceDocuments.length - 3}건
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 심사 의견 */}
+                        {proposal.comments && (
+                          <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-1">심사 의견</h4>
+                            <p className="text-sm text-gray-600">{proposal.comments}</p>
+                          </div>
+                        )}
+
+                        {/* 액션 버튼 */}
+                        <div className="flex gap-2 pt-4 border-t border-gray-100">
+                          <select
+                            value={proposal.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value as PerformanceProposal['status'];
+                              handleUpdateProposalStatus(proposal.id, newStatus);
+                            }}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          >
+                            <option value="PENDING">대기중</option>
+                            <option value="REVIEWING">검토중</option>
+                            <option value="APPROVED">승인</option>
+                            <option value="REJECTED">반려</option>
+                          </select>
+
+                          <select
+                            value={proposal.grade || ''}
+                            onChange={(e) => {
+                              const grade = e.target.value as ProposalGrade;
+                              handleUpdateProposalStatus(proposal.id, proposal.status, grade);
+                            }}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                          >
+                            <option value="">등급 선택</option>
+                            <option value="S">S등급 (30억 이상)</option>
+                            <option value="A">A등급 (20억 이상)</option>
+                            <option value="B">B등급 (10억 이상)</option>
+                            <option value="C">C등급 (3억 이상)</option>
+                            <option value="D">D등급 (3억 미만)</option>
+                          </select>
+
+                          <button
+                            onClick={() => {
+                              const comments = prompt('심사 의견을 입력하세요:', proposal.comments || '');
+                              if (comments !== null) {
+                                handleUpdateProposalStatus(proposal.id, proposal.status, proposal.grade, comments);
+                              }
+                            }}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                          >
+                            의견 작성
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+
+                {filteredProposals.length === 0 && (
+                  <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+                    <ClipboardCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-400">
+                      {proposalSearchQuery
+                        ? '검색 결과가 없습니다'
+                        : '제출된 안건이 없습니다'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </>

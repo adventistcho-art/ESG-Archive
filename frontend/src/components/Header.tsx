@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Menu, X, LogIn } from 'lucide-react';
+import { Menu, X, LogIn, FileText } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 export default function Header() {
@@ -57,6 +57,13 @@ export default function Header() {
             <Link href="/whitepaper" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
               백서
             </Link>
+            <Link
+              href="/proposals/submit"
+              className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all"
+            >
+              <FileText className="w-4 h-4" />
+              안건 제출
+            </Link>
             {isAuthenticated ? (
               <>
                 <Link href="/admin" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">
@@ -108,6 +115,9 @@ export default function Header() {
         </a>
         <Link href="/whitepaper" className="block px-6 py-3 text-gray-600 hover:text-gray-900" onClick={() => setMenuOpen(false)}>
           백서
+        </Link>
+        <Link href="/proposals/submit" className="block px-6 py-3 text-emerald-600 font-semibold hover:text-emerald-700" onClick={() => setMenuOpen(false)}>
+          안건 제출
         </Link>
         {isAuthenticated ? (
           <>
